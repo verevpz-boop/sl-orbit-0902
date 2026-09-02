@@ -49,6 +49,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.zoomToCursor = true;
 controls.minDistance = 0.4;
+controls.zoomSpeed = 3.0;   // пинч на телефоне — быстрее
 controls.maxDistance = 700;
 controls.maxPolarAngle = Math.PI * 0.52;
 
@@ -96,6 +97,27 @@ canvas.addEventListener('dblclick', (e) => {
     controls.update();
   }
 });
+
+// колесо = ПОЛЁТ к точке под курсором (22 % дистанции за щелчок), назад — отъезд.
+// Перехватываем на window в capture-фазе, чтобы штатный медленный зум OrbitControls не срабатывал.
+const _flyRay = new THREE.Raycaster();
+addEventListener('wheel', (e) => {
+  if (e.target !== canvas) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  const r = canvas.getBoundingClientRect();
+  const m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  _flyRay.setFromCamera(m, camera);
+  const hits = _flyRay.intersectObjects(scene.children, true);
+  const p = hits.length ? hits[0].point.clone() : _flyRay.ray.at(60, new THREE.Vector3());
+  const d = camera.position.distanceTo(p);
+  const fwd = e.deltaY < 0;
+  if (fwd && d < 0.8) return;                    // не входить в поверхность
+  const k = fwd ? 0.22 : -0.28;
+  const step = p.sub(camera.position).multiplyScalar(k);
+  camera.position.add(step);
+  controls.target.add(step);                     // центр орбиты едет вместе с камерой
+  controls.update();
+}, { capture: true, passive: false });
 
 function resize() {
   const w = canvas.clientWidth || innerWidth;
