@@ -18,7 +18,7 @@
   <div class="hud">
     <b>ШОУМЕН — СКА Арена, детальный эскиз</b><br>
     Чаша + сцена + зоны + экраны + фермы + приборы + кинетика + камеры 8–17.<br>
-    <small><b>Колесо — зум К КУРСОРУ</b> (куда мышь, туда летишь) · ЛКМ — орбита · ПКМ — панорама ·
+    <small><b>Колесо — ПОЛЁТ к курсору</b> (куда мышь, туда летишь) · ЛКМ — крутить вокруг того, к чему подлетел · ПКМ — панорама · WASD/QE — ходить (Shift — быстрее) ·
     <b>двойной клик по объекту — крутиться вокруг него</b>. Болты вырезаны, остальное как у художников.</small>
     <div style="margin-top:8px;font-size:12px;line-height:1.7"><span style="color:#3f7bff">■</span> кубы &nbsp;<span style="color:#22b8f0">■</span> экраны &nbsp;<span style="color:#f0a81a">■</span> свет &nbsp;<span style="color:#e02220">■</span> лебёдки<br><span style="color:#a822d4">■</span> кинетика &nbsp;<span style="color:#10b861">■</span> звук &nbsp;<span style="color:#12b8c2">■</span> камеры &nbsp;<span style="color:#9fa4ad">■</span> сцена/леса</div>
   </div>
@@ -105,6 +105,7 @@ addEventListener('wheel', (e) => {
   if (e.target !== canvas) return;
   e.preventDefault(); e.stopImmediatePropagation();
   const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return;             // холст без размера (скрытая вкладка) — не летим в NaN
   const m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   _flyRay.setFromCamera(m, camera);
   const hits = _flyRay.intersectObjects(scene.children, true);
@@ -113,11 +114,31 @@ addEventListener('wheel', (e) => {
   const fwd = e.deltaY < 0;
   if (fwd && d < 0.8) return;                    // не входить в поверхность
   const k = fwd ? 0.22 : -0.28;
-  const step = p.sub(camera.position).multiplyScalar(k);
-  camera.position.add(step);
-  controls.target.add(step);                     // центр орбиты едет вместе с камерой
+  const dir = p.clone().sub(camera.position);
+  if (!isFinite(dir.x + dir.y + dir.z)) return;
+  camera.position.add(dir.clone().multiplyScalar(k));
+  // центр орбиты = точка, к которой летим (ЛКМ крутит вокруг неё), без попадания — 30 м впереди
+  if (hits.length) controls.target.copy(p);
+  else controls.target.copy(camera.position).add(dir.normalize().multiplyScalar(30));
   controls.update();
 }, { capture: true, passive: false });
+
+// клавиши: W/S — вперёд/назад по взгляду, A/D — вбок, Q/E — вниз/вверх, Shift — ×4
+addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  const map = { w: [0, 0, -1], s: [0, 0, 1], a: [-1, 0, 0], d: [1, 0, 0], q: [0, -1, 0], e: [0, 1, 0],
+                ц: [0, 0, -1], ы: [0, 0, 1], ф: [-1, 0, 0], в: [1, 0, 0], й: [0, -1, 0], у: [0, 1, 0] };
+  const v = map[key]; if (!v) return;
+  e.preventDefault();
+  const speed = (e.shiftKey ? 6 : 1.5);
+  const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+  const move = new THREE.Vector3()
+    .addScaledVector(right, v[0] * speed)
+    .addScaledVector(new THREE.Vector3(0, 1, 0), v[1] * speed)
+    .addScaledVector(fwd, -v[2] * speed);
+  camera.position.add(move); controls.target.add(move); controls.update();
+});
 
 function resize() {
   const w = canvas.clientWidth || innerWidth;
