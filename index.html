@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ШОУМЕН — детальный эскиз (орбита)</title>
+<style>
+  html,body{margin:0;height:100%;background:#15181e;font-family:Segoe UI,Arial,sans-serif;color:#cdd3dc;overflow:hidden}
+  #c{width:100vw;height:100vh;display:block}
+  .hud{position:fixed;left:16px;top:14px;z-index:10;font-size:13px;line-height:1.5;
+       background:rgba(20,24,30,.78);padding:10px 14px;border-radius:8px;border:1px solid #2a3038;max-width:360px}
+  .hud b{color:#8fb6ff}
+  .hud small{color:#7e8794}
+  #load{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:15px;color:#8fb6ff}
+</style>
+</head>
+<body>
+  <div class="hud">
+    <b>ШОУМЕН — СКА Арена, детальный эскиз</b><br>
+    Чаша + сцена + зоны + экраны + фермы + приборы + кинетика + камеры 8–17.<br>
+    <small><b>Колесо — зум К КУРСОРУ</b> (куда мышь, туда летишь) · ЛКМ — орбита · ПКМ — панорама ·
+    <b>двойной клик по объекту — крутиться вокруг него</b>. Болты вырезаны, остальное как у художников.</small>
+    <div style="margin-top:8px;font-size:12px;line-height:1.7"><span style="color:#3f7bff">■</span> кубы &nbsp;<span style="color:#22b8f0">■</span> экраны &nbsp;<span style="color:#f0a81a">■</span> свет &nbsp;<span style="color:#e02220">■</span> лебёдки<br><span style="color:#a822d4">■</span> кинетика &nbsp;<span style="color:#10b861">■</span> звук &nbsp;<span style="color:#12b8c2">■</span> камеры &nbsp;<span style="color:#9fa4ad">■</span> сцена/леса</div>
+  </div>
+  <div id="load">Гружу модель (89 МБ)…</div>
+  <canvas id="c"></canvas>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15181e);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 3000);
+camera.position.set(120, 90, -140);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.zoomToCursor = true;
+controls.minDistance = 0.4;
+controls.maxDistance = 700;
+controls.maxPolarAngle = Math.PI * 0.52;
+
+scene.add(new THREE.HemisphereLight(0xdde4f0, 0x3a3f4a, 1.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(120, 200, 80);
+scene.add(sun);
+const sun2 = new THREE.DirectionalLight(0xcfd8ff, 0.6);
+sun2.position.set(-150, 120, -100);
+scene.add(sun2);
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('https://unpkg.com/three@0.169.0/examples/jsm/libs/draco/');
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(draco);
+gltfLoader.load('showmen_detail.glb?v=' + Date.now(), (g) => {
+  scene.add(g.scene);
+  document.getElementById('load').remove();
+  const box = new THREE.Box3().setFromObject(g.scene);
+  const c = box.getCenter(new THREE.Vector3());
+  controls.target.copy(c);
+  controls.update();
+}, (ev) => {
+  const el = document.getElementById('load');
+  if (el && ev.total) el.textContent = 'Гружу модель… ' + Math.round(ev.loaded / ev.total * 100) + '%';
+}, (err) => {
+  const el = document.getElementById('load');
+  if (el) el.textContent = 'Ошибка загрузки: ' + err;
+});
+
+// двойной клик — перецентровка орбиты на точку под курсором
+const ray = new THREE.Raycaster();
+canvas.addEventListener('dblclick', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1,
+                              -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(m, camera);
+  const hits = ray.intersectObjects(scene.children, true);
+  if (hits.length) {
+    const p = hits[0].point;
+    const d = camera.position.distanceTo(p);
+    controls.target.copy(p);
+    // подъехать на треть дистанции к цели
+    camera.position.lerp(p, Math.min(0.45, 25 / Math.max(d, 1)));
+    controls.update();
+  }
+});
+
+function resize() {
+  const w = canvas.clientWidth || innerWidth;
+  const h = canvas.clientHeight || innerHeight;
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+window.__cam = { camera, controls, THREE, scene };
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
