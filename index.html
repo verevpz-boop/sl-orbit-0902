@@ -67,6 +67,28 @@ const gltfLoader = new GLTFLoader();
 gltfLoader.setDRACOLoader(draco);
 gltfLoader.load('showmen_detail.glb?v=' + Date.now(), (g) => {
   scene.add(g.scene);
+  // МУЗЫКАНТЫ И ПОДИУМЫ (03.09.2026): манекены TRELLIS + станки 4×3 в нишах перед кубами — как в кабине AIRSAT.
+  // Координаты = GLB (x, y вверх, z = −y сцены). Подиумы: пол ниши 1.5, высота 2.0 → верх 3.5 (+1 над декой, как на видео).
+  const FIG_BASE = 'figures/';
+  const EXTRA = [
+    { url: 'prop_podium_4x3x1.glb', x: -3.0, y: 1.5, z: -18.5, sy: 2.0,  name: 'Подиум L' },
+    { url: 'prop_podium_4x3x1.glb', x:  9.0, y: 1.5, z: -18.5, sy: 2.0,  name: 'Подиум R' },
+    { url: 'fig_keys.glb',          x: -3.0, y: 3.5, z: -18.5, h: 1.75,  name: 'Клавишник' },
+    { url: 'fig_drummer.glb',       x:  9.0, y: 3.5, z: -18.5, h: 1.35,  name: 'Барабанщик' },
+    { url: 'fig_guitar.glb',        x: -8.5, y: 2.5, z: -16.5, h: 1.75,  name: 'Гитарист 1' },
+    { url: 'fig_guitar.glb',        x: 14.5, y: 2.5, z: -16.5, h: 1.75,  name: 'Гитарист 2' },
+  ];
+  for (const e of EXTRA) gltfLoader.load(FIG_BASE + e.url, (gg) => {
+    const m = gg.scene;
+    const b = new THREE.Box3().setFromObject(m), s = b.getSize(new THREE.Vector3());
+    if (e.h) m.scale.setScalar(e.h / (s.y || 1));
+    if (e.sy) m.scale.y *= e.sy;
+    const b2 = new THREE.Box3().setFromObject(m);
+    m.position.set(e.x - (b2.min.x + b2.max.x) / 2, e.y - b2.min.y, e.z - (b2.min.z + b2.max.z) / 2);
+    m.name = 'FIG_' + e.name;
+    m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    scene.add(m);
+  });
   document.getElementById('load').remove();
   const box = new THREE.Box3().setFromObject(g.scene);
   const c = box.getCenter(new THREE.Vector3());
